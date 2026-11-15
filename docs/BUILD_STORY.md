@@ -76,6 +76,8 @@ deleting an application cascades to its history.
    `pg.Pool`: each call can go to a different connection, so the "transaction" isn't one. Fix: a
    `db.transaction(fn)` helper that checks out one client, runs BEGIN/COMMIT/ROLLBACK on it, and
    releases it in `finally`. PGlite uses its own `transaction()` behind the same interface.
+   (Caught while writing PATCH, before it ever ran on a real pool. The `pg` path is not exercised by
+   local tests yet; CI will run the suite against a real PostgreSQL service to cover it.)
 2. *Dates shifted by time zone.* Postgres `DATE` came back as a JS `Date` at UTC midnight
    (`2026-11-13T00:00:00.000Z`), which in Toronto displays as Nov 12. Fix: a type parser for
    DATE (oid 1082) that keeps the `YYYY-MM-DD` string. The PGlite version still failed — two tests
