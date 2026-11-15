@@ -38,3 +38,52 @@ in `schema_migrations` and wraps each file in a transaction (all-or-nothing). Sa
 **Tests (Vitest, 6):** migrations are idempotent; external rows need no job id; invalid status is
 rejected; a WaterlooWorks id on a LinkedIn row is rejected; duplicate WaterlooWorks id is rejected;
 deleting an application cascades to its history.
+
+## Step 2 — REST API (2026-11-13)
+
+**Endpoints** (Express 5, JSON):
+
+| Method | Path | What |
+|---|---|---|
+| GET | `/api/applications?status=&source=&q=&sort=&limit=&offset=` | filtered, paginated list + total |
+| GET | `/api/applications/deadlines?days=14` | Saved jobs due today … N days, soonest first |
+| GET | `/api/applications/:id` | one application + its status timeline |
+| POST | `/api/applications` | create (WaterlooWorks or external) |
+| PATCH | `/api/applications/:id` | partial update; status change adds a timeline event |
+| DELETE | `/api/applications/:id` | delete (timeline cascades) |
+| GET | `/api/stats` | counts by status and by source |
+
+**Decisions**
+- **`createApp(db)` separate from `listen()`.** Tests build the app around an in-memory database and
+  call it through supertest without opening a port.
+- **Validate at the edge with zod.** Every body and query string is parsed by a schema. Unknown fields
+  (e.g. a client sending `id` or `created_at`) are dropped, not trusted. Errors come back as `400` with
+  a list of bad fields so the frontend can show them next to the inputs.
+- **One error handler.** Maps zod errors → 400, Postgres unique violation (23505) → 409,
+  check violation (23514) → 400, everything else → 500 with details only in the server log.
+- **SQL injection.** Values always go in as `$1, $2…` parameters. The two places that build SQL text
+  use whitelists: `sort` picks one of three fixed `ORDER BY` strings, and PATCH column names come from
+  the zod schema's keys, never from the request. A test sends `sort=id;DROP TABLE users` and expects 400.
+- **LIKE wildcards escaped.** Searching `100%` must find the literal text, so `%`, `_` and `\` are
+  escaped before building the `ILIKE` pattern.
+- **PATCH in a transaction with `SELECT … FOR UPDATE`.** Read old status → update → insert event must
+  be atomic; the row lock stops two simultaneous edits from both logging the same change.
+- **Auto `applied_on`.** Moving to Applied fills today's date if it was empty.
+
+**Problems I hit**
+1. *Transactions on a connection pool.* My first migration runner sent `BEGIN`, the statements and
+   `COMMIT` as separate `db.query()` calls. That works on PGlite (one connection) but is wrong on a
+   `pg.Pool`: each call can go to a different connection, so the "transaction" isn't one. Fix: a
+   `db.transaction(fn)` helper that checks out one client, runs BEGIN/COMMIT/ROLLBACK on it, and
+   releases it in `finally`. PGlite uses its own `transaction()` behind the same interface.
+2. *Dates shifted by time zone.* Postgres `DATE` came back as a JS `Date` at UTC midnight
+   (`2026-11-13T00:00:00.000Z`), which in Toronto displays as Nov 12. Fix: a type parser for
+   DATE (oid 1082) that keeps the `YYYY-MM-DD` string. The PGlite version still failed — two tests
+   caught it — because `new PGlite(undefined, options)` silently ignores `options`. Passing one
+   object `new PGlite({ dataDir, parsers })` fixed it.
+3. *"Today" in which time zone?* `CURRENT_DATE` in the database is UTC on most hosts, so after ~7 pm
+   Eastern the deadline view would think it's tomorrow. The server computes today in
+   America/Toronto and passes it as a parameter; a test checks today/yesterday/+5/+30 days.
+
+**Tests:** 21 API tests with supertest (27 total with the schema tests), all on a fresh in-memory
+PostgreSQL per test.

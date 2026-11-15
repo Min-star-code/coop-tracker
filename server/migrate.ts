@@ -21,13 +21,12 @@ export async function migrate(db: Db): Promise<string[]> {
   for (const file of files) {
     if (done.has(file)) continue;
     const sql = await readFile(path.join(dir, file), "utf8");
-    await db.query("BEGIN");
     try {
-      for (const stmt of splitSql(sql)) await db.query(stmt);
-      await db.query("INSERT INTO schema_migrations(name) VALUES ($1)", [file]);
-      await db.query("COMMIT");
+      await db.transaction(async (tx) => {
+        for (const stmt of splitSql(sql)) await tx.query(stmt);
+        await tx.query("INSERT INTO schema_migrations(name) VALUES ($1)", [file]);
+      });
     } catch (err) {
-      await db.query("ROLLBACK");
       throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
     }
     ran.push(file);
