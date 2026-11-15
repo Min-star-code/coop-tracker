@@ -182,5 +182,51 @@ Rejected 9; 30 with a legacy-status note); a second sync reported 1,014 unchange
 retry after invalid JSON; 502 after two invalid answers; 503 with no key; 400 for too-short input
 without calling the model; viewer 403. Total suite: 52.
 
-**Not done yet:** I have not run it against the real Gemini API. Next: a small labelled set of real
-postings to measure how often it agrees with my manual sorting.
+## Step 6 — Running it for real, and measuring it (2026-11-13)
+
+**Problems on the first real calls**
+1. *The model name I guessed didn't exist.* `gemini-flash-latest` returned 404 for my key. Listing the
+   models through the API showed what was really available; `gemini-2.5-flash` was also 404 already.
+2. *A request hung for minutes.* `gemini-3.8-flash` and `3.7-flash` were overloaded (503/504), and the
+   SDK by default retries **5 times with exponential backoff up to 60 s**. A person waiting on a web
+   page can't wait that long. Fix: 20 s timeout per attempt, at most 2 attempts, then a clear error
+   (`429` "quota reached" or `502` "Gemini request failed (503)") instead of a hang.
+3. *Free-tier quota is 20 requests per model per day.* My second eval run failed 18 times with 429.
+   The error details said `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `quotaValue 20`.
+   Quotas are per model, so I switched the eval to `gemini-3.5-flash-lite`, which has its own quota.
+   For the website (a few classifications a day) the limit is fine; for evals it's the bottleneck.
+
+**Eval set (`eval/cases.json`, runner `scripts/eval-classifier.ts`)**
+- 20 real WaterlooWorks postings I had saved, labelled by **what I actually did**: I applied to all
+  of them (one skipped for paperwork), so none is "citizen_pr", even though several say "hiring
+  preference for Canadian citizens", "Security Clearance Required" or "Reliability Status". These are
+  exactly the hard negatives the rule has to get right.
+- 4 synthetic edge cases: SWPP, SECRET clearance, Canada Summer Jobs (all citizen_pr), and a
+  prompt-injection attempt that tries to force "waterloo".
+- Posting texts stay out of the repo (employer content); only ids, labels and results are committed.
+- One case turned out to be **ambiguous**: Manulife 486388's location field says Toronto, but its
+  description says "join us in our Waterloo, Ontario office". The model said Waterloo, which is
+  defensible. I marked it ambiguous and excluded it from the score rather than counting it either way.
+
+**Results**
+
+| Run | Model | Prompt | Real (19 scored) | Synthetic (4) | Typical latency |
+|---|---|---|---|---|---|
+| 1 baseline | gemini-3.5-flash | v1 | 13/19 | 3/4 (1 was a 429, not a wrong answer) | ~3 s |
+| 2 | gemini-3.5-flash-lite | v2 | 19/19 | 4/4 | ~1 s |
+
+Baseline errors: 6 of 6 were false "citizen_pr", every time quoting "Security Clearance Required" or a
+citizenship *preference*. v1 of the prompt literally said "roles needing a security clearance" count,
+so the model was following my vague rule. v2 says what does count (MUST be citizen/PR, SWPP, CSJ,
+SECRET/TOP SECRET) and lists what doesn't (preference, eligible to work in Canada, proof of
+citizenship *or* work permit, background check, Reliability Status, the generic WaterlooWorks line).
+This matches how I actually applied.
+
+**Honest limits**
+- Run 2 changed the prompt **and** the model at once, so I can't say how much each helped. Next:
+  re-run prompt v1 on flash-lite once the daily quota resets.
+- v2 was written after looking at these same misses, on a small set (19 real + 4 synthetic, no real
+  citizen_pr or remote examples). 19/19 is not evidence of 100% accuracy on new postings; the real
+  test is new postings as they come in.
+
+Default model is now `gemini-3.5-flash-lite` (faster, higher free quota, no worse on this set).

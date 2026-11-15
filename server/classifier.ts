@@ -72,7 +72,7 @@ export async function classify(llm: LlmClient, posting: string): Promise<Classif
 /** Real client: Google Gemini with structured JSON output and temperature 0 (same input → same answer). */
 export class GeminiClient implements LlmClient {
   private ai: GoogleGenAI;
-  constructor(apiKey: string, readonly model = "gemini-3.5-flash") {
+  constructor(apiKey: string, readonly model = "gemini-3.5-flash-lite") {
     // The SDK's default is 5 attempts with exponential backoff up to 60 s on 429/5xx, so one
     // overloaded call could hold a web request for minutes. A person is waiting on this
     // page: 20 s per attempt, one retry after ~1 s, then fail with a clear error.
