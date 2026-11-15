@@ -165,7 +165,7 @@ Rejected 9; 30 with a legacy-status note); a second sync reported 1,014 unchange
   `GeminiClient` implements it with the `@google/genai` SDK; tests use a `FakeLlm` that returns canned
   answers and records the prompts. No API key is needed to run the test suite or CI.
 - **Why Gemini:** the Google AI Studio free tier covers the Flash models, enough for a personal tool.
-  The model name is configurable (`GEMINI_MODEL`, default alias `gemini-flash-latest`) because
+  The model name is configurable (`GEMINI_MODEL`, default `gemini-3.5-flash`, the newest Flash model the API listed on 2026-11-13) because
   model versions change faster than code.
 - **Structured output + temperature 0.** The request asks for JSON matching a schema, so the answer is
   machine-readable and repeatable.
