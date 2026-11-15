@@ -151,4 +151,4 @@ Two kinds of caller, two kinds of credential:
 Result on a local database: first sync created 1,014 rows (Skipped 553, Applied 363, Saved 89,
 Rejected 9; 30 with a legacy-status note); a second sync reported 1,014 unchanged.
 
-**Tests:** 45 in total (schema 6, applications 16, auth 14, sync 9).
+**Tests:** 45 in total (schema 6, applications 16, auth 13, sync 10).
