@@ -323,3 +323,39 @@ third sync changed nothing.
 
 **Tests now:** 68 API/unit tests (Vitest) + 5 browser tests (Playwright; new: Today queue ordering,
 Applied and Skip remove the card and update the weekly count).
+
+## Step 9 — Deployment: GitHub, CI, Neon and Render (2026-11-14)
+
+**Where it runs.**
+- **Render (free web service)** builds the repo and runs one Node process that serves both the API and
+  the built React app. The whole setup is in `render.yaml` (a Render "Blueprint"), so the deployment is
+  code, not dashboard clicks.
+- **Neon (free PostgreSQL)**. Render's own free database is deleted after 30 days; Neon's is not.
+  The region is AWS us-east-2 (Ohio), the same region as the Render service, so queries don't cross
+  the continent.
+- The connection uses TLS with certificate checking on (`rejectUnauthorized: true`), not the common
+  copy-paste setting that turns the check off.
+
+**Secrets never pass through chat or git.**
+- The database URL and Gemini key were pasted into the Render dashboard by me, by hand.
+- Locally they live in `.env` / `.env.production` (git-ignored, file mode 600).
+- The production login was created with `npm run cli:prod -- user:create`: it prompts for the password,
+  so it is never on the command line or in shell history.
+- The sync agent's API token was created with `token:create agent --write-env`, which writes it straight
+  into `.env` without printing it.
+
+**Bug 1: CI broke on day one for a reason outside my code.** The first GitHub Actions run passed type
+checks and every Vitest test, including the real-PostgreSQL ones, but failed at
+`playwright install --with-deps`. `ubuntu-latest` had just moved to Ubuntu 26, and Playwright 1.55 does
+not know that OS, so it can't install the browser's system libraries. Fix: pin `runs-on: ubuntu-24.04`.
+Lesson: "latest" in CI is a dependency that can change under you, so pin it like any other.
+
+**Importing the real data.** `npm run sync` against the live API created 1,014 rows in about 6 seconds.
+A second run reported 1,014 unchanged, so the sync is idempotent in production too.
+
+**Checked on the live site:** sign-in, Today queue, Overview and Applications all load real data;
+requests without a session get 401. In production the session cookie is set `Secure` + `HttpOnly`; behind Render's HTTPS
+proxy (`trust proxy` is set so Express knows the original request was HTTPS).
+
+**Known limit of the free plan:** the service sleeps after 15 minutes without traffic, and the next
+visit takes about 50 seconds to wake it up.

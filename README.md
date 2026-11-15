@@ -5,7 +5,7 @@ WaterlooWorks postings and records my applications in a JSON file; this site tur
 daily to-do queue, keeps it in sync both ways, lets a mentor follow along read-only, and classifies
 pasted postings with an LLM.
 
-**Live:** _deploying — link coming soon_
+**Live:** https://coop-tracker-phw6.onrender.com (sign-in required; on the free plan the first visit after a quiet period takes about 50 s to wake up)
 
 ## What it does
 
