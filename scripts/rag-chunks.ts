@@ -35,6 +35,21 @@ export function buildChunks(): Chunk[] {
   }
 }
 
+// ---- 1b. skills lines ("**Programming:** Python, ..."): without them the helper reported Git as
+// "not covered" for a QA posting, although Git is on my resume.
+{
+  let inSkills = false;
+  for (const line of readFileSync(path.join(ws, "resume-update-handoff/MASTER_OUTLINE.md"), "utf8").split("\n")) {
+    if (line.startsWith("## ")) { inSkills = line.startsWith("## SKILLS"); continue; }
+    const m = inSkills && line.match(/^\*\*(.+?):?\*\*:?\s*(.+)$/);
+    if (!m) continue;
+    const label = m[1].replace(/（[^）]*）/g, "").replace(/:$/, "").trim();
+    const items = m[2].replace(/（[^）]*）/g, "").trim();
+    if (!label || CJK.test(label) || CJK.test(items) || items.length < 10) continue;
+    chunks.push({ source: "outline", ref: `Skills: ${label}`, text: `${label}: ${items}` });
+  }
+}
+
 // ---- 2. cover-letter paragraphs
 {
   let ref = "";

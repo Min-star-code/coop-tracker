@@ -180,9 +180,12 @@ export type Hit = { chunk: Chunk; score: number };
  * Top-k by cosine similarity among chunks from the given sources. `perRef` caps how many chunks one
  * project / paragraph may take, so a project with many similar bullets can't fill the whole list.
  */
-export function topK(query: number[], chunks: Chunk[], sources: Source[], k: number, perRef = Infinity): Hit[] {
+export function topK(
+  query: number[], chunks: Chunk[], sources: Source[], k: number, perRef = Infinity,
+  keep: (c: Chunk) => boolean = () => true,
+): Hit[] {
   const ranked = chunks
-    .filter((c) => sources.includes(c.source))
+    .filter((c) => sources.includes(c.source) && keep(c))
     .map((chunk) => ({ chunk, score: cosine(query, chunk.embedding) }))
     .sort((a, b) => b.score - a.score);
   const used = new Map<string, number>();
@@ -205,7 +208,8 @@ You get the posting and numbered EXCERPTS from the student's own resume bullets 
 Rules:
 - Use ONLY the excerpts. Never add a skill, tool, number, employer or experience that is not in the
   excerpt you cite. If no excerpt fits a requirement, list that requirement under "gaps" instead.
-- Pick at most 6 excerpts, best first. For each: "chunk_id" (the excerpt number), "requirement"
+- Pick at most 6 excerpts, best first. Excerpts starting with a skills label (e.g. "Tools: ...") are
+  skill lists: cite one when the posting asks for a listed tool or skill. For each: "chunk_id" (the excerpt number), "requirement"
   (a short phrase copied word for word from the posting that this excerpt answers), and "why"
   (one sentence, max 200 characters, linking that requirement to what the excerpt says).
 - "gaps": up to 3 short phrases copied from the posting that none of the excerpts covers.
@@ -270,7 +274,13 @@ export async function suggest(db: Db, embedder: Embedder, llm: LlmClient, postin
   const chunks = await allChunks(db);
   if (!chunks.length) throw new HttpError(409, "the RAG index is empty: run npm run rag:index first");
   const [q] = await embedder.embed([focusPosting(posting)], "query");
-  const material = topK(q, chunks, ["outline", "library"], k, 2);
+  // Skills lines ("Tools: Git, GitHub, ...") get their own 3 slots. Ranked together with project
+  // bullets they pushed relevant bullets out of the top k (recall@8 70.1% -> 65.1% in the eval).
+  const isSkill = (c: Chunk) => c.ref.startsWith("Skills: ");
+  const material = [
+    ...topK(q, chunks, ["outline", "library"], k, 2, (c) => !isSkill(c)),
+    ...topK(q, chunks, ["outline"], 3, 1, isSkill),
+  ];
   const similar = topK(q, chunks, ["posting"], 5);
   const excerpts = material.map((h) => `<excerpt id="${h.chunk.id}" from="${h.chunk.ref}">\n${h.chunk.text}\n</excerpt>`).join("\n");
   const user = `<posting>\n${posting.replaceAll("</posting>", "").slice(0, 12_000)}\n</posting>\n\n${excerpts}`;

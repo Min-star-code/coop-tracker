@@ -498,3 +498,13 @@ AI, iOS). For each one I confirmed which of my projects/paragraphs *should* come
 "entity too large", but my error handler didn't know that type and turned it into a 500, which hid the
 cause. Fixes: the handler now answers **413** (test added); vectors are rounded to 6 decimals, which
 doesn't change the cosine ranking, so the upload is 3.9 MB; the route limit is 10 MB.
+
+**Adding my skills lines (rounds 3–4).** On the live site a QA posting listed "Git" as a gap, because
+only project bullets were indexed. I added the 8 English skills lines from the outline as chunks.
+- Round 3 (skills ranked together with bullets): recall@8 dropped **70.1% → 65.1%**. The skills lines
+  took top-8 slots from project bullets that should have come back.
+- Round 4 (skills get their own 3 slots next to the 8 bullet/paragraph slots): recall@8 back to
+  **70.1%**. The QA posting's gaps became tools I really haven't used (CodeceptJS, K6, TestRail), not Git.
+- New side effect: when the model cites a skills line it sometimes puts the skill list itself in
+  "requirement" instead of a posting quote. The guard flags these (6/37), so the flag works, but it's
+  something to tighten in the prompt later.

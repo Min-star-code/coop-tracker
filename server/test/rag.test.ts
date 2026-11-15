@@ -199,3 +199,17 @@ describe("focusPosting and per-source cap", () => {
     expect(topK([1, 0], chunks, ["outline"], 3, 2).map((h) => h.chunk.id)).toEqual([1, 2, 4]);
   });
 });
+
+describe("skills lines", () => {
+  it("are retrieved in their own slots, so they don't push project bullets out of the top k", async () => {
+    const llm = new FakeLlm([JSON.stringify({ picks: [], gaps: [] })]);
+    const { app: a, token } = await app(llm);
+    const skills = { source: "outline", ref: "Skills: Tools", text: "Tools: Git, GitHub, GitHub Actions (CI), Playwright tests" };
+    await index(a, token, [...CHUNKS, skills]).expect(200);
+    const owner = await login(a, OWNER);
+    const res = await owner.post("/api/rag/suggest").set(H).send({ text: POSTING }).expect(200);
+    const refs = res.body.retrieved.map((r: { ref: string }) => r.ref);
+    expect(refs).toContain("Skills: Tools");
+    expect(refs).toEqual(expect.arrayContaining(["Memory Map", "LeetReview", "D2 UWaterloo Life"]));
+  });
+});
