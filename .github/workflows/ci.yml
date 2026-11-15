@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.55 cannot install deps on Ubuntu 26 (ubuntu-latest since Oct 2026)
     # A real PostgreSQL, so the pg connection-pool code path is tested too
     # (locally the tests run on PGlite, in-process).
     services:
