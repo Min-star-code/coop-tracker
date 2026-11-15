@@ -1,0 +1,33 @@
+{
+  "name": "coop-tracker",
+  "version": "1.0.0",
+  "description": "Track co-op applications (WaterlooWorks + external) with roles and an LLM job classifier",
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx server/migrate.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.3.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "type": "module",
+  "private": true
+}
