@@ -1,10 +1,11 @@
 import { Router } from "express";
 import type { Db } from "../db.js";
 import { HttpError } from "../errors.js";
-import { createApplication, deadlineQuery, listQuery, updateApplication } from "../validation.js";
+import { requireOwner, requireUser } from "../auth.js";
+import { deadlineQuery, listQuery, updateApplication } from "../validation.js";
 
 const COLUMNS =
-  "id, source, ww_job_id, company, title, url, status, applied_on, deadline, note, created_at, updated_at";
+  "id, source, ww_job_id, external_id, company, title, url, status, applied_on, deadline, note, created_at, updated_at";
 
 // Whitelisted ORDER BY clauses: user input picks a key, never writes SQL.
 const ORDER_BY = {
@@ -15,6 +16,9 @@ const ORDER_BY = {
 
 export function applicationsRouter(db: Db): Router {
   const r = Router();
+  // Reading needs any signed-in person; the only write (PATCH) needs the owner.
+  // There is no create/delete: rows come from the sync agent (see sync.ts).
+  r.use(requireUser);
 
   // GET /api/applications?status=Saved,Applied&source=linkedin&q=qa&sort=deadline&limit=50&offset=0
   r.get("/", async (req, res) => {
@@ -69,22 +73,7 @@ export function applicationsRouter(db: Db): Router {
     res.json({ ...app.rows[0], events: events.rows });
   });
 
-  r.post("/", async (req, res) => {
-    const a = createApplication.parse(req.body);
-    const appliedOn = a.applied_on ?? (a.status === "Applied" ? today() : null);
-    const row = await db.transaction(async (tx) => {
-      const { rows } = await tx.query<{ id: number }>(
-        `INSERT INTO applications (source, ww_job_id, company, title, url, status, applied_on, deadline, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING ${COLUMNS}`,
-        [a.source, a.ww_job_id ?? null, a.company, a.title, a.url ?? null, a.status, appliedOn, a.deadline ?? null, a.note ?? null],
-      );
-      await tx.query("INSERT INTO status_events (application_id, to_status) VALUES ($1, $2)", [rows[0].id, a.status]);
-      return rows[0];
-    });
-    res.status(201).json(row);
-  });
-
-  r.patch("/:id", async (req, res) => {
+  r.patch("/:id", requireOwner, async (req, res) => {
     const id = parseId(req.params.id);
     const changes = updateApplication.parse(req.body);
     const row = await db.transaction(async (tx) => {
@@ -117,17 +106,12 @@ export function applicationsRouter(db: Db): Router {
     res.json(row);
   });
 
-  r.delete("/:id", async (req, res) => {
-    const { rows } = await db.query("DELETE FROM applications WHERE id = $1 RETURNING id", [parseId(req.params.id)]);
-    if (!rows[0]) throw new HttpError(404, "application not found");
-    res.status(204).end();
-  });
-
   return r;
 }
 
 export function statsRouter(db: Db): Router {
   const r = Router();
+  r.use(requireUser);
   r.get("/", async (_req, res) => {
     const byStatus = await db.query<{ status: string; n: number }>(
       "SELECT status, count(*)::int AS n FROM applications GROUP BY status",
@@ -143,7 +127,7 @@ export function statsRouter(db: Db): Router {
   return r;
 }
 
-function parseId(raw: string): number {
+function parseId(raw: unknown): number {
   const id = Number(raw);
   if (!Number.isSafeInteger(id) || id <= 0) throw new HttpError(404, "application not found");
   return id;

@@ -2,32 +2,22 @@ import { z } from "zod";
 
 export const STATUSES = ["Saved", "Applied", "Interview", "Offer", "Ranked", "Rejected", "Skipped"] as const;
 export const SOURCES = ["waterlooworks", "company_site", "linkedin", "referral", "other"] as const;
+export type Status = (typeof STATUSES)[number];
 
-const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalDate = z.iso.date().nullable().optional(); // "YYYY-MM-DD"
 
-/** Columns a client may write. Anything else in the body is ignored, never trusted. */
-const fields = {
-  source: z.enum(SOURCES),
-  ww_job_id: z.string().trim().regex(/^\d+$/, "must be digits").nullable().optional(),
-  company: text(200),
-  title: text(300),
-  url: z.url({ protocol: /^https?$/ }).max(2000).nullable().optional(),
-  status: z.enum(STATUSES),
-  applied_on: optionalDate,
-  deadline: optionalDate,
-  note: z.string().max(5000).nullable().optional(),
-};
-
-export const createApplication = z
-  .object({ ...fields, status: fields.status.default("Saved") })
-  .refine((a) => a.source === "waterlooworks" || !a.ww_job_id, {
-    message: "ww_job_id is only allowed when source is waterlooworks",
-    path: ["ww_job_id"],
-  });
-
+/**
+ * What the owner may change on the website. Company, title, source and ids come only from the
+ * sync agent; the owner adjusts progress (e.g. got an interview) and notes.
+ * Anything else in the body is dropped, never trusted.
+ */
 export const updateApplication = z
-  .object(fields)
+  .object({
+    status: z.enum(STATUSES),
+    note: z.string().max(5000).nullable(),
+    deadline: optionalDate,
+    applied_on: optionalDate,
+  })
   .partial()
   .refine((a) => Object.keys(a).length > 0, { message: "nothing to update" });
 
@@ -50,5 +40,4 @@ export const deadlineQuery = z.object({
   days: z.coerce.number().int().min(1).max(365).default(14),
 });
 
-export type CreateApplication = z.infer<typeof createApplication>;
 export type UpdateApplication = z.infer<typeof updateApplication>;

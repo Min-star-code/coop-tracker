@@ -7,6 +7,6 @@ const db = await openDb(url ? { url } : { dataDir: ".pglite" });
 await migrate(db);
 
 const port = Number(process.env.PORT ?? 3000);
-createApp(db).listen(port, () => {
+createApp(db, { secureCookies: process.env.NODE_ENV === "production" }).listen(port, () => {
   console.log(`coop-tracker API on http://localhost:${port} (${url ? "PostgreSQL" : "PGlite ./.pglite"})`);
 });

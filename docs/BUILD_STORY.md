@@ -89,3 +89,66 @@ deleting an application cascades to its history.
 
 **Tests:** 21 API tests with supertest (27 total with the schema tests), all on a fresh in-memory
 PostgreSQL per test.
+
+## Step 3 — Change of scope: the AI agent feeds the site (2026-11-13)
+
+After steps 1–2 I re-checked what the site is *for*. My applications are submitted by an AI agent
+(Claude Code) that already records every job in `applications.json`. Typing them in again by hand
+would be wasted work. So I removed manual create/delete and made the site a **read-mostly view fed
+by the agent**:
+
+```
+AI agent applies on WaterlooWorks → updates applications.json → npm run sync → POST /api/sync → PostgreSQL
+                                                                              people (owner / viewer) ← browser
+```
+
+- **`POST /api/sync` takes the whole file and upserts it in one transaction.** Key = `ww_job_id` for
+  WaterlooWorks, `external_id` for anything else. Rows missing from the file are never deleted.
+- **All-or-nothing validation.** Every record is checked first; if any is bad (unknown status,
+  duplicate id, both/neither id) the response lists the problems and nothing is written.
+- **Who wins when both sides edit? Content fingerprint.** Each row stores `sync_hash`, the SHA-256 of
+  the JSON record it was last synced from. Same record again → skipped, so a status I changed on the
+  website (e.g. "Interview") survives the next sync. When the agent's record really changes, its new
+  hash differs and the agent's version is applied. I first thought of comparing `updated_at`, but the
+  file only stores a *date*, so two changes on the same day would be missed. The hash has no such gap.
+- **Legacy statuses.** The file uses 5 statuses that aren't in the site's workflow. They are folded in
+  (Not Selected → Rejected; Needs Information / Cover Letter Required / Application Failed /
+  Submission Uncertain → Saved) and the original word is kept as a note prefix, e.g. `[WW: Not Selected]`.
+
+## Step 4 — Login, roles and the agent's API token (2026-11-13)
+
+Two kinds of caller, two kinds of credential:
+
+| Caller | Credential | Can do |
+|---|---|---|
+| Owner (me) | email + password → session cookie | read everything, change status / note / dates |
+| Viewer (mentor) | email + password → session cookie | read only (PATCH → 403) |
+| Sync agent | `Authorization: Bearer ct_…` API token | only `POST /api/sync`; cannot read the site |
+
+- **Passwords: scrypt** (Node built-in, memory-hard, random 16-byte salt per user), compared with
+  `timingSafeEqual`. Stored as `scrypt$N$r$p$salt$hash` so parameters can be raised later.
+- **Login gives no hints.** Wrong email and wrong password return the same message, and an unknown
+  email still runs a real scrypt check, so response time doesn't reveal which emails exist.
+- **Brute force:** 5 failed logins per IP in 15 minutes → 429. In-memory, which is fine for one
+  instance (a multi-instance deploy would need a shared store).
+- **Session cookie:** 32 random bytes, `HttpOnly` (page JS can't read it), `SameSite=Lax`, `Secure`
+  in production, 14 days. Only its SHA-256 is in the database; logout deletes the row, so it is dead
+  immediately (a JWT would stay valid until it expires).
+- **CSRF:** cookie-authenticated writes must send `X-Requested-With: coop-tracker`. Another site can
+  make the browser send our cookie, but can't add a custom header without a CORS preflight, which
+  this server never approves.
+- **API tokens** are hashed the same way and shown once at creation (`npm run cli -- token:create`).
+  A person's cookie can't call the sync endpoint and a token can't read data: least privilege.
+- **No sign-up page.** Accounts are made with `npm run cli -- user:create <email> <owner|viewer>`.
+
+**Problems found by importing the real file (1,014 records)**
+1. 31 records had `updated_at` as a full timestamp (`2026-10-19T14:43:18-04:00`) instead of a date —
+   one batch was written by a different script. The validator now accepts both and keeps the local date.
+2. 7 Skipped records had empty company and title. They are kept, labelled `(not recorded)`.
+3. Without the all-or-nothing rule, the first attempt would have half-imported the file. Instead it
+   wrote nothing and listed the bad rows, which is how I found 1 and 2.
+
+Result on a local database: first sync created 1,014 rows (Skipped 553, Applied 363, Saved 89,
+Rejected 9; 30 with a legacy-status note); a second sync reported 1,014 unchanged.
+
+**Tests:** 45 in total (schema 6, applications 16, auth 14, sync 9).
