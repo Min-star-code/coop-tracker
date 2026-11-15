@@ -7,6 +7,10 @@ pasted postings with an LLM.
 
 **Live:** https://coop-tracker-phw6.onrender.com (sign-in required; on the free plan the first visit after a quiet period takes about 50 s to wake up)
 
+![Today queue](docs/screenshots/today.png)
+
+<sub>Screenshots are from the live site; my email, notes and the Chinese one-line briefs the agent writes for me were swapped for sample text before capture.</sub>
+
 ## What it does
 
 - **Today queue.** Sorted, still-open postings, most urgent deadline first, with location, term
@@ -23,6 +27,10 @@ pasted postings with an LLM.
   ([results](eval/)).
 
 There is no WaterlooWorks scraping. Data comes only from the agent's file.
+
+| Overview | Applications + timeline | LLM classifier |
+|---|---|---|
+| ![Overview](docs/screenshots/dashboard.png) | ![Applications](docs/screenshots/applications.png) | ![Classifier](docs/screenshots/classify.png) |
 
 ## Stack
 

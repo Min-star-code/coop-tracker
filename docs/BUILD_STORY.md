@@ -359,3 +359,14 @@ proxy (`trust proxy` is set so Express knows the original request was HTTPS).
 
 **Known limit of the free plan:** the service sleeps after 15 minutes without traffic, and the next
 visit takes about 50 seconds to wake it up.
+
+**Bug 2: "API key not valid" only in production.** The classifier returned 502 on the live site, while
+the same key worked locally. The app only said "Gemini request failed (400)", which wasn't enough.
+1. I logged Gemini's own error message (with anything key-like masked): `API_KEY_INVALID`.
+2. I still couldn't see the value stored in the Render dashboard, and shouldn't. So at startup the server
+   logs the key's *length and the first 8 hex chars of its SHA-256*: enough to compare two keys,
+   useless for recovering one.
+3. Render: 67 characters. Local: 53. The dashboard held a mis-pasted value, and an earlier "fix" had
+   never been saved. After re-pasting, the log showed a 53-character key and classification worked.
+Also: the key is now `.trim()`-ed, since values pasted into dashboards often carry a trailing newline.
+Lesson: when a secret "works here but not there", compare fingerprints instead of guessing.
