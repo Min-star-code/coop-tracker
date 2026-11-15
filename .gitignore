@@ -5,3 +5,4 @@ dist-server/
 .pglite/
 test-results/
 playwright-report/
+.dev-credentials.json

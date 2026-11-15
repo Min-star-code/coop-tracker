@@ -114,7 +114,8 @@ export async function syncApplications(db: Db, input: unknown): Promise<SyncResu
            p.status, appliedOn, r.deadline ?? null, p.note, p.hash, r.updated_at],
         );
         await tx.query(
-          "INSERT INTO status_events (application_id, to_status, changed_at) VALUES ($1, $2, $3::date)",
+          // A bare date would become midnight UTC = the evening before in Toronto. Use noon Toronto time.
+          "INSERT INTO status_events (application_id, to_status, changed_at) VALUES ($1, $2, ($3::date + time '12:00') AT TIME ZONE 'America/Toronto')",
           [ins.rows[0].id, p.status, r.updated_at],
         );
         result.created++;

@@ -39,6 +39,14 @@ describe("POST /api/sync", () => {
     expect(rows[0].applied_on).toBe("2026-09-19");
   });
 
+  it("dates the first timeline event at noon Toronto time on the file's day (not the evening before)", async () => {
+    await sync([ww({ updated_at: "2026-11-13" })]);
+    const { rows } = await db.query<{ d: string }>(
+      "SELECT to_char(changed_at AT TIME ZONE 'America/Toronto', 'YYYY-MM-DD HH24:MI') AS d FROM status_events",
+    );
+    expect(rows[0].d).toBe("2026-11-13 12:00");
+  });
+
   it("is idempotent: the same file twice changes nothing", async () => {
     await sync([ww()]).expect(200);
     expect((await sync([ww()])).body).toEqual({ created: 0, updated: 0, unchanged: 1 });

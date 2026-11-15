@@ -1,4 +1,6 @@
 import express from "express";
+import path from "node:path";
+import { existsSync } from "node:fs";
 import cookieParser from "cookie-parser";
 import type { Db } from "./db.js";
 import { errorHandler, HttpError } from "./errors.js";
@@ -12,6 +14,8 @@ export interface AppOptions {
   secureCookies?: boolean;
   /** LLM for /api/classify. Tests pass a fake; production a GeminiClient; undefined = 503. */
   llm?: LlmClient;
+  /** Built React app (dist/client). Served with an SPA fallback when it exists. */
+  clientDir?: string;
 }
 
 /**
@@ -40,6 +44,12 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.use("/api", () => {
     throw new HttpError(404, "no such endpoint");
   });
+
+  // The React app: static files, and index.html for any other non-API path.
+  if (opts.clientDir && existsSync(opts.clientDir)) {
+    app.use(express.static(opts.clientDir, { index: false, maxAge: "1h" }));
+    app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(opts.clientDir!, "index.html")));
+  }
 
   app.use(errorHandler);
   return app;

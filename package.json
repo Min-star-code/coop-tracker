@@ -5,10 +5,15 @@
   "scripts": {
     "dev": "tsx watch server/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p client",
     "migrate": "tsx server/migrate.ts",
     "cli": "tsx server/cli.ts",
-    "sync": "tsx scripts/sync.ts"
+    "sync": "tsx scripts/sync.ts",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "tsx server/index.ts",
+    "dev:seed": "tsx scripts/dev-seed.ts",
+    "test:e2e": "vite build && playwright test"
   },
   "author": "",
   "license": "ISC",
@@ -18,17 +23,24 @@
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
     "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/supertest": "^7.2.1",
+    "@vitejs/plugin-react": "^6.3.0",
     "supertest": "^7.3.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "vite": "^8.3.8",
     "vitest": "^5.1.0"
   },
   "type": "module",

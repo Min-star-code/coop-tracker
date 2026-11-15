@@ -230,3 +230,45 @@ This matches how I actually applied.
   test is new postings as they come in.
 
 Default model is now `gemini-3.5-flash-lite` (faster, higher free quota, no worse on this set).
+
+## Step 7 — React frontend and end-to-end tests (2026-11-14)
+
+**Stack:** React 19 + TypeScript, built by Vite into `dist/client`. In production Express serves the
+built files and falls back to `index.html` for any non-`/api` path, so the site and API share one
+origin: the session cookie works without CORS. In development Vite proxies `/api` to Express.
+
+**Pages**
+- *Sign in.* No sign-up page (accounts come from the CLI).
+- *Overview.* Totals by status (Skipped shown separately so it doesn't swamp the pipeline), counts by
+  source, and Saved jobs due in the next 14 days.
+- *Applications.* Search (company, title or job id), status chips (multi-select), source and sort,
+  50 per page. Clicking a row opens a side panel with the timeline; the owner can change status and
+  note, a viewer sees the same panel read-only.
+- *Classify a posting* (owner only): paste a posting, see the bucket and the model's reason.
+
+**Decisions**
+- No UI framework or router library: 4 screens, hash-based navigation, one CSS file with light/dark
+  colours. Less to explain, less to break.
+- One `api.ts` wrapper adds the CSRF header to every request and turns the server's field errors into
+  readable messages.
+- Search waits 250 ms after typing stops (debounce) instead of one request per keystroke, and a
+  response that arrives after a newer one started is ignored (stale-response guard).
+- The UI hides what a viewer can't do, but that is only convenience: the server enforces roles.
+  Hiding a button is not security.
+
+**Bugs found by running it in a browser**
+1. *404 on the home page.* The server found the built client with `new URL(..).pathname`, which keeps
+   `%20` for the space in my folder name ("Waterloo Work"), so the folder "didn't exist". Fix:
+   `fileURLToPath`. The same fix made the local database path independent of the working directory.
+2. *Timeline one day early (again).* Synced records start their timeline on the file's date. Turning a
+   bare date into a timestamp means midnight UTC, which is the evening before in Toronto, so a job
+   applied on Nov 13 showed "Nov 12". Fix: store noon Toronto time for date-only events and format
+   timeline dates in America/Toronto; a new test checks the stored time is `2026-11-13 12:00` Toronto.
+
+**End-to-end tests (Playwright, 4):** a separate test server runs on an in-memory database with 5
+fixture records, two test accounts and a fake LLM, so tests never touch real data or the Gemini quota.
+1. wrong password shows the error; 2. owner: overview count, status filter, search, change status to
+Interview, timeline shows "Applied → Interview"; 3. viewer: no classifier link, panel is read-only,
+no Save button; 4. owner: classify a posting with the fake model.
+
+Totals now: 53 API tests (Vitest + supertest) + 4 browser tests (Playwright), all passing locally.
