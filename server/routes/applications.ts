@@ -5,7 +5,8 @@ import { requireOwner, requireUser } from "../auth.js";
 import { deadlineQuery, listQuery, updateApplication } from "../validation.js";
 
 const COLUMNS =
-  "id, source, ww_job_id, external_id, company, title, url, status, applied_on, deadline, note, created_at, updated_at";
+  "id, source, ww_job_id, external_id, company, title, url, status, applied_on, deadline, note, " +
+  "category, brief, location, duration, applicants, cover_letter, web_edited_at, created_at, updated_at";
 
 // Whitelisted ORDER BY clauses: user input picks a key, never writes SQL.
 const ORDER_BY = {
@@ -62,6 +63,35 @@ export function applicationsRouter(db: Db): Router {
     res.json({ items: rows });
   });
 
+  // The daily to-do queue: sorted, still-open Saved jobs (citizen/PR-only hidden), most urgent first,
+  // plus how many I applied to / skipped since Monday.
+  r.get("/today", async (_req, res) => {
+    const day = today();
+    const queue = await db.query(
+      `SELECT ${COLUMNS} FROM applications
+       WHERE status = 'Saved' AND category IS NOT NULL AND category <> 'citizen_pr'
+         AND (deadline IS NULL OR deadline >= $1::date)
+       ORDER BY deadline ASC NULLS LAST, applicants ASC NULLS LAST, id`,
+      [day],
+    );
+    const counts = await db.query<{ expired: number; unsorted: number; hidden_pr: number }>(
+      `SELECT
+         count(*) FILTER (WHERE category IS NOT NULL AND category <> 'citizen_pr' AND deadline < $1::date)::int AS expired,
+         count(*) FILTER (WHERE category IS NULL)::int AS unsorted,
+         count(*) FILTER (WHERE category = 'citizen_pr')::int AS hidden_pr
+       FROM applications WHERE status = 'Saved'`,
+      [day],
+    );
+    const week = await db.query<{ applied: number; skipped: number }>(
+      `SELECT count(*) FILTER (WHERE to_status = 'Applied')::int AS applied,
+              count(*) FILTER (WHERE to_status = 'Skipped')::int AS skipped
+       FROM status_events
+       WHERE from_status IS NOT NULL AND changed_at >= ($1::date + time '00:00') AT TIME ZONE 'America/Toronto'`,
+      [monday(day)],
+    );
+    res.json({ today: day, items: queue.rows, ...counts.rows[0], week: week.rows[0] });
+  });
+
   r.get("/:id", async (req, res) => {
     const id = parseId(req.params.id);
     const app = await db.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [id]);
@@ -92,7 +122,9 @@ export function applicationsRouter(db: Db): Router {
       const keys = Object.keys(changes) as (keyof typeof changes)[];
       const set = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
       const { rows } = await tx.query(
-        `UPDATE applications SET ${set}, updated_at = now() WHERE id = $1 RETURNING ${COLUMNS}`,
+        // A status/note change is a website edit the sync script must copy back into applications.json.
+        `UPDATE applications SET ${set}, updated_at = now()${"status" in changes || "note" in changes ? ", web_edited_at = now()" : ""}
+         WHERE id = $1 RETURNING ${COLUMNS}`,
         [id, ...keys.map((k) => changes[k] ?? null)],
       );
       if (statusChanged) {
@@ -136,4 +168,11 @@ function parseId(raw: unknown): number {
 /** Today's date in Toronto (where I apply from), as YYYY-MM-DD. */
 function today(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+}
+
+/** The Monday of the week containing a YYYY-MM-DD day. */
+export function monday(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import type { Db } from "../db.js";
-import { mapStatus } from "../sync.js";
+import { fileTime, mapStatus, torontoIso } from "../sync.js";
 import { login, OWNER, setup } from "./helpers.js";
 
 let db: Db;
@@ -34,7 +34,7 @@ describe("mapStatus", () => {
 describe("POST /api/sync", () => {
   it("creates new rows; Applied rows get applied_on from updated_at", async () => {
     const res = await sync([ww(), ww({ job_id: "1", status: "Saved" })]).expect(200);
-    expect(res.body).toEqual({ created: 2, updated: 0, unchanged: 0 });
+    expect(res.body).toEqual({ created: 2, updated: 0, unchanged: 0, keptWebsite: 0 });
     const { rows } = await db.query("SELECT applied_on FROM applications WHERE ww_job_id = '487008'");
     expect(rows[0].applied_on).toBe("2026-09-19");
   });
@@ -49,7 +49,7 @@ describe("POST /api/sync", () => {
 
   it("is idempotent: the same file twice changes nothing", async () => {
     await sync([ww()]).expect(200);
-    expect((await sync([ww()])).body).toEqual({ created: 0, updated: 0, unchanged: 1 });
+    expect((await sync([ww()])).body).toEqual({ created: 0, updated: 0, unchanged: 1, keptWebsite: 0 });
   });
 
   it("an agent status change updates the row and adds a timeline event", async () => {
@@ -111,5 +111,77 @@ describe("POST /api/sync", () => {
     await sync([ww(), ww({ job_id: "2" })]);
     await sync([ww()]);
     expect((await db.query("SELECT count(*)::int AS n FROM applications")).rows[0].n).toBe(2);
+  });
+});
+
+describe("sort fields", () => {
+  it("stores category, brief, location, duration, applicants and cover-letter flag", async () => {
+    await sync([ww({ status: "Saved", category: "waterloo", brief: "QA with Playwright", location: "Waterloo hybrid",
+                     duration: "4 months", applicants: 25, cl_required: false, deadline: "2026-11-18" })]).expect(200);
+    const { rows } = await db.query("SELECT category, brief, location, duration, applicants, cover_letter, deadline FROM applications");
+    expect(rows[0]).toEqual({ category: "waterloo", brief: "QA with Playwright", location: "Waterloo hybrid",
+                              duration: "4 months", applicants: 25, cover_letter: false, deadline: "2026-11-18" });
+  });
+
+  it("rejects an unknown category", async () => {
+    await sync([ww({ category: "maybe" })]).expect(400);
+  });
+});
+
+describe("two-way sync", () => {
+  const editOnWebsite = async (status: string) => {
+    const owner = await login(app, OWNER);
+    const { body } = await owner.get("/api/applications?q=487008");
+    await owner.patch(`/api/applications/${body.items[0].id}`).set(H).send({ status }).expect(200);
+  };
+  const pending = () => request(app).get("/api/sync/pending").set("Authorization", `Bearer ${token}`);
+
+  it("a website status change shows up as pending, with a Toronto-time timestamp", async () => {
+    await sync([ww({ status: "Saved" })]);
+    expect((await pending()).body.items).toEqual([]);
+    await editOnWebsite("Applied");
+    const items = (await pending().expect(200)).body.items;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ job_id: "487008", status: "Applied" });
+    expect(items[0].edited_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-0[45]:00$/);
+  });
+
+  it("an older file record does not undo a newer website edit; other fields still update", async () => {
+    await sync([ww({ status: "Saved", updated_at: "2026-11-01" })]);
+    await editOnWebsite("Applied");
+    const res = await sync([ww({ status: "Saved", updated_at: "2026-11-02", brief: "new brief" })]).expect(200);
+    expect(res.body.keptWebsite).toBe(1);
+    const row = (await db.query("SELECT status, brief, web_edited_at FROM applications")).rows[0];
+    expect(row.status).toBe("Applied");
+    expect(row.brief).toBe("new brief");
+    expect(row.web_edited_at).not.toBeNull(); // still pending until the file catches up
+  });
+
+  it("once the file catches up (written back by the sync script), the edit is no longer pending", async () => {
+    await sync([ww({ status: "Saved", updated_at: "2026-11-01" })]);
+    await editOnWebsite("Applied");
+    const [edit] = (await pending()).body.items;
+    await sync([ww({ status: edit.status, updated_at: edit.edited_at })]).expect(200);
+    expect((await pending()).body.items).toEqual([]);
+    expect((await db.query("SELECT status FROM applications")).rows[0].status).toBe("Applied");
+  });
+
+  it("a file change made after the website edit wins (last writer wins)", async () => {
+    await sync([ww({ status: "Saved", updated_at: "2026-11-01" })]);
+    await editOnWebsite("Applied");
+    const later = torontoIso(new Date(Date.now() + 60_000));
+    await sync([ww({ status: "Skipped", updated_at: later })]).expect(200);
+    expect((await db.query("SELECT status, web_edited_at FROM applications")).rows[0])
+      .toEqual({ status: "Skipped", web_edited_at: null });
+  });
+
+  it("pending edits need the agent token", async () => {
+    const owner = await login(app, OWNER);
+    await owner.get("/api/sync/pending").expect(401);
+  });
+
+  it("a date-only updated_at means the start of that day in Toronto", () => {
+    expect(fileTime("2026-11-14").toISOString()).toBe("2026-11-14T05:00:00.000Z"); // EST = UTC-5
+    expect(fileTime("2026-07-01").toISOString()).toBe("2026-07-01T04:00:00.000Z"); // EDT = UTC-4
   });
 });

@@ -272,3 +272,54 @@ Interview, timeline shows "Applied → Interview"; 3. viewer: no classifier link
 no Save button; 4. owner: classify a posting with the fake model.
 
 Totals now: 53 API tests (Vitest + supertest) + 4 browser tests (Playwright), all passing locally.
+
+## Step 8 — Making it useful every day: the Today queue and two-way sync (2026-11-14)
+
+After using the first version I asked what the site gave me that WaterlooWorks doesn't. Honest
+answer: not much day to day. Status updates appear in WaterlooWorks first, and my site only knew
+what the agent had written. What I actually did every day was read a markdown file of newly sorted
+postings, then go apply. So the site now replaces that file.
+
+**Today page (the new home page).** Saved jobs that have been sorted, with citizen/PR-only jobs
+hidden, expired deadlines hidden, most urgent first. Each card shows deadline countdown, location,
+duration, applicant count, whether a cover letter is needed, the one-line brief (with hard
+requirements), and buttons: **Applied**, **Skip** (pick a reason, stored in the note) and
+**Copy job ID**. Header: applied / skipped since Monday.
+
+**New data.** Migration 003 adds `category`, `brief`, `location`, `duration`, `applicants`,
+`cover_letter`. The daily sort now writes them into `applications.json`. For the 11-13 sort I wrote
+`scripts/import-sort-md.ts`, which parses the markdown lines. Its first dry run caught two wrong
+values: on lines that list several jobs ("57 人 / 496480 … 161 人") the applicant count of one job
+was attached to another. Rule now: a line that mentions a second job id is skipped. Better missing
+than wrong. 33 records were filled in; record count and other fields unchanged (backup kept).
+
+**Two-way sync, last writer wins.** Clicking "Applied" on the website must reach `applications.json`,
+otherwise the agent would list the job again tomorrow.
+- A website status/note change sets `web_edited_at`.
+- `npm run sync` first PULLS pending website edits (`GET /api/sync/pending`) and writes each into the
+  file if it is newer than the file's `updated_at`; then PUSHES the whole file.
+- On push, if the file record is older than a pending website edit, the server keeps the website's
+  status/note and takes every other field from the file; if the file is newer, the file wins and the
+  pending flag is cleared.
+- A date-only `updated_at` counts as the *start* of that day in Toronto, so a website click later
+  that day wins. New records written by the agent use full timestamps with offset.
+- The file is written atomically (temp file + rename) in exactly its original format (2-space JSON, no
+  final newline), so a write-back changes only the edited record's lines.
+
+**Bugs caught by tests**
+1. *Milliseconds.* The write-back stores the edit time to the second, the database to the
+   microsecond. After the file "caught up", it still looked a few ms older, so the edit stayed
+   pending forever. Fix: compare whole seconds.
+2. *Changing what goes into the fingerprint re-updates rows once.* `updated_at` is now hashed as
+   written (not cut to the date), so the first sync after the change reported 64 updates (31 old
+   timestamp records + 33 backfilled). Harmless, but worth knowing before changing a hash input.
+3. *A deadlock in my own integration check.* I started the API and called the sync script with
+   `execFileSync` in the same Node process. The synchronous call blocked the event loop, so the server
+   could never answer the script. Async `execFile` fixed it.
+
+**Integration check (on a copy of the real file):** first sync created 1,014 rows; marking one job
+Applied on the website and syncing wrote exactly that record back (2 lines changed in the file); a
+third sync changed nothing.
+
+**Tests now:** 68 API/unit tests (Vitest) + 5 browser tests (Playwright; new: Today queue ordering,
+Applied and Skip remove the card and update the weekly count).

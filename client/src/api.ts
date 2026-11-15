@@ -17,7 +17,22 @@ export interface Application {
   applied_on: string | null;
   deadline: string | null;
   note: string | null;
+  category: Category | null;
+  brief: string | null;
+  location: string | null;
+  duration: string | null;
+  applicants: number | null;
+  cover_letter: boolean | null;
   updated_at: string;
+}
+export type Category = "citizen_pr" | "portfolio_design" | "waterloo" | "other";
+export interface TodayQueue {
+  today: string;
+  items: Application[];
+  expired: number;
+  unsorted: number;
+  hidden_pr: number;
+  week: { applied: number; skipped: number };
 }
 export interface StatusEvent { from_status: Status | null; to_status: Status; changed_at: string }
 export interface Stats { byStatus: Record<string, number>; bySource: Record<string, number> }
@@ -57,6 +72,7 @@ export const api = {
   deadlines: (days = 14) => request<{ items: Application[] }>("GET", `/api/applications/deadlines?days=${days}`),
   list: (params: URLSearchParams) =>
     request<{ items: Application[]; total: number }>("GET", `/api/applications?${params}`),
+  today: () => request<TodayQueue>("GET", "/api/applications/today"),
   get: (id: number) => request<Application & { events: StatusEvent[] }>("GET", `/api/applications/${id}`),
   update: (id: number, changes: Partial<Pick<Application, "status" | "note" | "deadline" | "applied_on">>) =>
     request<Application>("PATCH", `/api/applications/${id}`, changes),

@@ -129,3 +129,40 @@ describe("stats and unknown endpoints", () => {
     expect(res.body.error).toBe("no such endpoint");
   });
 });
+
+describe("GET /api/applications/today", () => {
+  it("lists open sorted Saved jobs, most urgent first, and hides citizen/PR-only, expired and unsorted ones", async () => {
+    await seed(db, [
+      { title: "later", ww_job_id: null, deadline: torontoDay(5) },
+      { title: "urgent", deadline: torontoDay(1) },
+      { title: "no deadline" },
+      { title: "expired", deadline: torontoDay(-1) },
+      { title: "pr only", deadline: torontoDay(2) },
+      { title: "unsorted", deadline: torontoDay(2) },
+      { title: "already applied", deadline: torontoDay(2), status: "Applied" },
+    ]);
+    const cat: Record<string, string | null> = {
+      later: "other", urgent: "waterloo", "no deadline": "portfolio_design", expired: "other",
+      "pr only": "citizen_pr", unsorted: null, "already applied": "other",
+    };
+    for (const [title, c] of Object.entries(cat)) await db.query("UPDATE applications SET category = $1 WHERE title = $2", [c, title]);
+
+    const res = await owner.get("/api/applications/today").expect(200);
+    expect(res.body.items.map((a: { title: string }) => a.title)).toEqual(["urgent", "later", "no deadline"]);
+    expect(res.body).toMatchObject({ expired: 1, unsorted: 1, hidden_pr: 1 });
+  });
+
+  it("counts this week's Applied and Skipped clicks", async () => {
+    const [a, b] = await seed(db, [{}, {}]);
+    await owner.patch(`/api/applications/${a}`).set(H).send({ status: "Applied" }).expect(200);
+    await owner.patch(`/api/applications/${b}`).set(H).send({ status: "Skipped", note: "needs a car" }).expect(200);
+    expect((await owner.get("/api/applications/today")).body.week).toEqual({ applied: 1, skipped: 1 });
+  });
+
+  it("monday() finds the start of the week", async () => {
+    const { monday } = await import("../routes/applications.js");
+    expect(monday("2026-11-14")).toBe("2026-11-09"); // Saturday
+    expect(monday("2026-11-09")).toBe("2026-11-09"); // Monday
+    expect(monday("2026-11-15")).toBe("2026-11-09"); // Sunday
+  });
+});

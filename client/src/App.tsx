@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Me } from "./api";
 import { Login } from "./pages/Login";
+import { Today } from "./pages/Today";
 import { Dashboard } from "./pages/Dashboard";
 import { Applications } from "./pages/Applications";
 import { Classify } from "./pages/Classify";
 
-type Page = "dashboard" | "applications" | "classify";
+type Page = "today" | "dashboard" | "applications" | "classify";
 const pageFromHash = (): Page => {
   const h = location.hash.slice(1);
-  return h === "applications" || h === "classify" ? h : "dashboard";
+  return h === "dashboard" || h === "applications" || h === "classify" ? h : "today";
 };
 
 export function App() {
@@ -28,6 +29,7 @@ export function App() {
 
   const isOwner = me.role === "owner";
   const nav: [Page, string][] = [
+    ["today", "Today"],
     ["dashboard", "Overview"],
     ["applications", "Applications"],
     ...(isOwner ? ([["classify", "Classify a posting"]] as [Page, string][]) : []),
@@ -58,6 +60,7 @@ export function App() {
         </span>
       </header>
       <main>
+        {page === "today" && <Today canEdit={isOwner} />}
         {page === "dashboard" && <Dashboard />}
         {page === "applications" && <Applications canEdit={isOwner} />}
         {page === "classify" && isOwner && <Classify />}
