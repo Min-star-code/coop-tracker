@@ -33,7 +33,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.use(cookieParser());
   // The sync sends the whole applications.json (~1,000 rows), so it gets a bigger body limit.
   app.use("/api/sync", express.json({ limit: "5mb" }));
-  app.use("/api/rag/chunks", express.json({ limit: "5mb" })); // ~300 past postings + bullets
+  app.use("/api/rag/chunks", express.json({ limit: "10mb" })); // ~400 chunks with 768-number vectors (~4 MB)
   app.use(express.json({ limit: "100kb" }));
 
   app.get("/api/health", (_req, res) => {

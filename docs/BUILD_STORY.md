@@ -492,3 +492,9 @@ AI, iOS). For each one I confirmed which of my projects/paragraphs *should* come
 - **防编造（hallucination guard）**：模型只能“选”，不能“写”。它必须引用查到的块的编号；理由里出现的数字必须在原文里；页面显示的是我原来写的那句话。这就是我做这个功能的卖点：建议里没有一句是简历里没有的。
 - **怎么评测**：检索用 hit rate 和 recall。我先标好每个岗位“应该查到哪些项目”，再看前 8 个里查到几个（recall 70.1%）。生成用忠实度：被拦下的建议数，以及我人工检查理由里有没有原文没有的东西。
 - **precision 和 recall 在这里的意思**：precision 是查出来的 8 块里有多少是真的相关；recall 是该查到的里面查到了多少。我更看重 recall，因为漏掉一个好例子比多看一个不相关的块代价大，后者模型和我都会跳过。
+
+**Bug on the first live upload.** `npm run rag:index` got `500 internal error`. The body was 7.5 MB
+(395 chunks × 768 numbers printed with ~17 digits each), over the route's 5 MB limit. Express raised
+"entity too large", but my error handler didn't know that type and turned it into a 500, which hid the
+cause. Fixes: the handler now answers **413** (test added); vectors are rounded to 6 decimals, which
+doesn't change the cosine ranking, so the upload is 3.9 MB; the route limit is 10 MB.

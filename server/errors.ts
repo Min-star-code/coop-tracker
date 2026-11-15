@@ -27,6 +27,9 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(409).json({ error: "already exists" });
   } else if (err?.code === "23514") {
     res.status(400).json({ error: "value not allowed" });
+  } else if (err?.type === "entity.too.large") {
+    // Body over the route's size limit: say so, instead of a generic 500.
+    res.status(413).json({ error: "request body too large" });
   } else if (err?.type === "entity.parse.failed") {
     res.status(400).json({ error: "body is not valid JSON" });
   } else {

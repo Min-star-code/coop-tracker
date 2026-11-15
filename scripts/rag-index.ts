@@ -46,7 +46,11 @@ const vectors = await embedder.embed(chunks.map((c) => c.text), "document");
 const res = await fetch(`${url}/api/rag/chunks`, {
   method: "POST",
   headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-  body: JSON.stringify({ chunks: chunks.map((c, i) => ({ ...c, embedding: vectors[i] })), embedding_model: embedder.model }),
+  // 6 decimals is far more precision than cosine ranking needs, and halves the upload (7.5 MB -> 3.9 MB).
+  body: JSON.stringify({
+    chunks: chunks.map((c, i) => ({ ...c, embedding: vectors[i].map((x) => Math.round(x * 1e6) / 1e6) })),
+    embedding_model: embedder.model,
+  }),
   signal: AbortSignal.timeout(180_000), // first index embeds ~400 chunks; the free host may also be waking up
 });
 console.log(res.status, await res.text());

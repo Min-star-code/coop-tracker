@@ -91,6 +91,13 @@ describe("indexing", () => {
     expect(rows[0].embedding[0]).toBe(1); // normalised to unit length
   });
 
+  it("an oversized upload gets 413, not a generic 500", async () => {
+    const { app: a, token } = await app();
+    const big = { ...CHUNKS[0], text: "x".repeat(19_000) };
+    await request(a).post("/api/rag/chunks").set("Authorization", `Bearer ${token}`)
+      .send({ chunks: new Array(600).fill(big) }).expect(413);
+  });
+
   it("only the sync agent's token can upload; a signed-in owner cannot", async () => {
     const { app: a } = await app();
     const owner = await login(a, OWNER);
