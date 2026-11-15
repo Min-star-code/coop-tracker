@@ -152,3 +152,35 @@ Result on a local database: first sync created 1,014 rows (Skipped 553, Applied 
 Rejected 9; 30 with a legacy-status note); a second sync reported 1,014 unchanged.
 
 **Tests:** 45 in total (schema 6, applications 16, auth 13, sync 10).
+
+## Step 5 — LLM job classifier with Gemini (2026-11-13)
+
+`POST /api/classify` (owner only) takes a pasted posting and returns
+`{category, reason, model}`, category ∈ `citizen_pr | portfolio_design | waterloo | other`.
+
+- **Rules are the ones I already sort by by hand** (workspace `AGENTS.md`, cycle 3): check in order,
+  first match wins — citizenship/PR requirement (incl. SWPP, CSJ, security clearance) → portfolio-style
+  design/marketing/content → Waterloo/Kitchener/Cambridge/campus/remote → other.
+- **Provider behind an interface.** `LlmClient` has one method, `generateJson(system, user, schema)`.
+  `GeminiClient` implements it with the `@google/genai` SDK; tests use a `FakeLlm` that returns canned
+  answers and records the prompts. No API key is needed to run the test suite or CI.
+- **Why Gemini:** the Google AI Studio free tier covers the Flash models, enough for a personal tool.
+  The model name is configurable (`GEMINI_MODEL`, default alias `gemini-flash-latest`) because
+  model versions change faster than code.
+- **Structured output + temperature 0.** The request asks for JSON matching a schema, so the answer is
+  machine-readable and repeatable.
+- **Never trust model output.** The JSON is parsed and validated with zod like any user input. An
+  invalid answer (bad JSON, unknown category) gets one retry, then a `502`.
+- **Prompt injection.** A posting is untrusted text. It is wrapped in `<posting>` tags, the system
+  prompt says to treat it as data, and any `</posting>` inside it is removed so it can't close the
+  fence early. The worst a malicious posting can do is pick a wrong category: the output is limited
+  to four values and a short sentence, it triggers no actions, and React escapes it when shown.
+- **Cost control:** owner only (viewers get 403), posting length 50–20,000 characters, checked before
+  the model is called.
+
+**Tests (7, all with the fake client):** happy path and prompt fencing; fence break-out attempt;
+retry after invalid JSON; 502 after two invalid answers; 503 with no key; 400 for too-short input
+without calling the model; viewer 403. Total suite: 52.
+
+**Not done yet:** I have not run it against the real Gemini API. Next: a small labelled set of real
+postings to measure how often it agrees with my manual sorting.

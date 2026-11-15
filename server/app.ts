@@ -5,10 +5,13 @@ import { errorHandler, HttpError } from "./errors.js";
 import { authRouter, csrfGuard, loadPrincipal } from "./auth.js";
 import { applicationsRouter, statsRouter } from "./routes/applications.js";
 import { syncRouter } from "./sync.js";
+import { classifyRouter, type LlmClient } from "./classifier.js";
 
 export interface AppOptions {
   /** true in production (HTTPS): cookies are only sent over HTTPS. */
   secureCookies?: boolean;
+  /** LLM for /api/classify. Tests pass a fake; production a GeminiClient; undefined = 503. */
+  llm?: LlmClient;
 }
 
 /**
@@ -33,6 +36,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.use("/api/sync", syncRouter(db));
   app.use("/api/applications", applicationsRouter(db));
   app.use("/api/stats", statsRouter(db));
+  app.use("/api/classify", classifyRouter(opts.llm));
   app.use("/api", () => {
     throw new HttpError(404, "no such endpoint");
   });

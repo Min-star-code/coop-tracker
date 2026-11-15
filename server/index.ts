@@ -1,12 +1,15 @@
 import { createApp } from "./app.js";
 import { openDb } from "./db.js";
 import { migrate } from "./migrate.js";
+import { GeminiClient } from "./classifier.js";
 
 const url = process.env.DATABASE_URL;
 const db = await openDb(url ? { url } : { dataDir: ".pglite" });
 await migrate(db);
 
 const port = Number(process.env.PORT ?? 3000);
-createApp(db, { secureCookies: process.env.NODE_ENV === "production" }).listen(port, () => {
+const key = process.env.GEMINI_API_KEY;
+const llm = key ? new GeminiClient(key, process.env.GEMINI_MODEL || undefined) : undefined;
+createApp(db, { secureCookies: process.env.NODE_ENV === "production", llm }).listen(port, () => {
   console.log(`coop-tracker API on http://localhost:${port} (${url ? "PostgreSQL" : "PGlite ./.pglite"})`);
 });
