@@ -96,6 +96,9 @@ export class GeminiClient implements LlmClient {
       return res.text ?? "";
     } catch (err) {
       const status = (err as { status?: number }).status;
+      // Log Gemini's own message for the operator (Render logs), with anything key-like masked.
+      const detail = String((err as Error).message ?? err).replace(/(AIza|AQ\.)[\w.-]+/g, "[key]");
+      console.error(`Gemini error ${status ?? ""}: ${detail.slice(0, 300)}`);
       if (status === 429) throw new HttpError(429, "Gemini quota reached, try again in a minute");
       throw new HttpError(502, `Gemini request failed${status ? ` (${status})` : ""}`);
     }

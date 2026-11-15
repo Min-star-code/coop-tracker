@@ -9,7 +9,8 @@ const db = await openDb(url ? { url } : { dataDir: fileURLToPath(new URL("../.pg
 await migrate(db);
 
 const port = Number(process.env.PORT ?? 3000);
-const key = process.env.GEMINI_API_KEY;
+// trim(): a key pasted into a dashboard often brings a trailing space or newline with it.
+const key = process.env.GEMINI_API_KEY?.trim();
 const llm = key ? new GeminiClient(key, process.env.GEMINI_MODEL || undefined) : undefined;
 // fileURLToPath, not URL.pathname: the latter keeps "%20" for the space in "Waterloo Work".
 const clientDir = fileURLToPath(new URL("../dist/client", import.meta.url));
