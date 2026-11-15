@@ -23,8 +23,9 @@ pasted postings with an LLM.
 - **Roles.** The owner can edit; a viewer (e.g. a mentor) can only read. The sync agent uses a
   separate API token that can only sync.
 - **LLM classifier.** Paste a posting, and Gemini sorts it into *citizen/PR-only*, *portfolio/design*,
-  *Waterloo region* or *other*, quoting the deciding fact. It has an eval on 20 real postings
-  ([results](eval/)).
+  *Waterloo region* or *other*, quoting the deciding fact. Evaluated on **141**
+  labelled real postings with a held-out test split: 68/70 on test, **0/23** citizen/PR postings missed,
+  70/70 consistent across two runs ([reports](eval/gold/), [how](docs/BUILD_STORY.md)).
 
 There is no WaterlooWorks scraping. Data comes only from the agent's file.
 

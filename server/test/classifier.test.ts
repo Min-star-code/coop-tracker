@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createApp } from "../app.js";
-import type { LlmClient } from "../classifier.js";
+import { SYSTEM_PROMPT, type LlmClient } from "../classifier.js";
 import type { Db } from "../db.js";
 import { login, OWNER, setup, VIEWER } from "./helpers.js";
 
@@ -19,8 +19,11 @@ class FakeLlm implements LlmClient {
   }
 }
 
-let db: Db;
-afterEach(() => db.close());
+let db: Db | undefined;
+afterEach(async () => {
+  await db?.close();
+  db = undefined;
+});
 
 async function ownerWith(llm?: LlmClient) {
   const s = await setup();
@@ -77,5 +80,13 @@ describe("POST /api/classify", () => {
     db = s.db;
     const viewer = await login(createApp(db, { llm: new FakeLlm([]) }), VIEWER);
     await viewer.post("/api/classify").set(H).send({ text: POSTING }).expect(403);
+  });
+});
+
+describe("production prompt", () => {
+  it("is exactly the prompt version measured by the gold-set eval (eval/prompts/v3.txt)", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const measured = await readFile(new URL("../../eval/prompts/v3.txt", import.meta.url), "utf8");
+    expect(SYSTEM_PROMPT).toBe(measured.trim());
   });
 });

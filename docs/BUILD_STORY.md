@@ -370,3 +370,67 @@ the same key worked locally. The app only said "Gemini request failed (400)", wh
    never been saved. After re-pasting, the log showed a 53-character key and classification worked.
 Also: the key is now `.trim()`-ed, since values pasted into dashboards often carry a trailing newline.
 Lesson: when a secret "works here but not there", compare fingerprints instead of guessing.
+
+## Step 10 — Evaluating the classifier properly: 141 labelled postings (2026-11-15)
+
+The first eval (Step 6) had 20 postings and almost no citizen/PR-only examples, so it could not
+answer the question an interviewer will ask: *how do you know the AI is right?*
+
+**Gold set.** The site's database doesn't store posting text, but my workspace had the full text of
+310 postings saved during earlier application batches. They stay in a private folder outside this
+repo (`eval-private/`, never committed); only job IDs, labels and results are public.
+- Labels come from rules applied to the text the model also sees: SWPP/CSJ funding, "must be a
+  Canadian citizen", Secret clearance or "Restricted to Work Placement program" → citizen/PR;
+  marketing/design/content titles → portfolio/design; city Waterloo/Kitchener/Cambridge or remote →
+  Waterloo; the rest → other.
+- 13 postings were excluded because the deciding fact was only in the WaterlooWorks prescreen
+  questions, not in the text. Grading the model on information it never saw would be unfair.
+- I spot-checked 20 labels against the posting text; all 20 were right.
+- 141 postings, citizen/PR over-sampled (46) because that is the costly mistake. Split in half:
+  **dev** (used to find errors and change the prompt) and **test** (run once per finished prompt).
+
+**Metrics** (`npm run` → `scripts/eval-gold.ts`, reports in `eval/gold/`): accuracy, per-category
+precision and recall, a confusion matrix, the costly error counted separately, and consistency
+(every posting asked twice).
+
+**Results (Gemini 3.5 Flash-Lite, temperature 0)**
+
+| | dev v2 | dev v3 | **test v2** | **test v3** |
+|---|---|---|---|---|
+| Accuracy | 58/71 (81.7%) | 71/71 | 68/70 (97.1%) | 68/70 (97.1%) |
+| Citizen/PR postings missed (costly) | 9/23 | 0/23 | 2/23 | **0/23** |
+| Citizen/PR recall | 60.9% | 100% | 91.3% | **100%** |
+| Open postings wrongly marked citizen/PR | 0 | 0 | 0 | 0 |
+| Same answer in both runs | 70/71 | — | — | **70/70** |
+
+What the dev errors showed, and what v3 changed (general rules, nothing about specific job IDs):
+1. All 9 costly misses were "Restricted to Work Placement program eligible students" postings. The
+   v2 prompt never mentioned this restriction, so the model fell through to the location rule.
+2. Design/marketing roles located in Waterloo were labelled "waterloo": the model jumped to the
+   location. v3 says to decide the role type first.
+3. A "remote from Canada" option wasn't recognised as remote.
+
+**Honest reading of the numbers.**
+- On the held-out test set accuracy did *not* go up (97.1% both times). What changed is *which*
+  mistakes remain: v3 made **zero** costly errors (v2 made 2); its two misses are cheap ones (a
+  marketing-insights job called design, a remote option missed).
+- The dev set looked much worse for v2 (81.7%) only because, by chance, it held more Work Placement
+  postings (9 of its 23 citizen/PR postings vs 2 in test). Small samples move numbers a lot.
+- dev v3 = 100% means little: I changed the prompt by looking at dev errors. Only the test number counts.
+
+**Regression check.** `npm run eval:regression` runs 20 fixed dev postings with fresh API calls and
+fails on any costly error or accuracy below 90%. It is *not* in GitHub Actions: the posting text is
+private (CI can't see it), real calls use the daily quota, and an LLM answer can change between runs,
+which would make CI flaky. CI keeps the fake-LLM tests for parsing and validation, plus a new test
+that the production prompt is byte-for-byte `eval/prompts/v3.txt`, so the site always runs the
+version that was measured. First regression run: 20/20, pass.
+
+### 用自己的话讲（面试用）
+
+- **为什么要评测**：AI 分类“看起来对”不算数。我先准备 141 个已经知道正确答案的岗位，让模型去分，再数它对了多少、错在哪里。
+- **准确率**：总共分对了多少。但只看它不够，因为不同的错代价不一样。
+- **精确率（precision）**：模型说“这是公民/PR 岗位”的那些里面，有多少真的是。精确率低 = 冤枉了能投的岗位，我会错过机会。
+- **召回率（recall）**：真正的公民/PR 岗位里面，模型找出来了多少。召回率低 = 漏掉了不能投的岗位，我会白投、甚至在预筛选里答错。对我来说漏掉更贵，所以单独数“最贵的错误”，还故意多放这类岗位。
+- **混淆矩阵**：一张表，行是正确答案，列是模型的答案，一眼能看出“哪类最常被错认成哪类”。我就是从这里发现 9 个错误全是同一个原因（Work Placement 限制没写进规则）。
+- **开发集 / 测试集**：改 prompt 只看开发集的错；测试集只在最后跑一次。否则就像先看了考卷答案再考试，分数没有意义。
+- **一致性**：同一个岗位问两次，看答案是否一样。temperature=0 也不能保证 100% 一样，所以要实测（测试集 70/70 一致）。
