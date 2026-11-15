@@ -1,7 +1,7 @@
 {
   "name": "coop-tracker",
   "version": "1.0.0",
-  "description": "Track co-op applications (WaterlooWorks + external) with roles and an LLM job classifier",
+  "description": "Daily co-op application tracker fed by an AI agent: Today queue, two-way sync, roles, Gemini job classifier",
   "scripts": {
     "dev": "tsx watch server/index.ts",
     "test": "vitest run",
@@ -13,10 +13,11 @@
     "build": "vite build",
     "start": "tsx server/index.ts",
     "dev:seed": "tsx scripts/dev-seed.ts",
-    "test:e2e": "vite build && playwright test"
+    "test:e2e": "vite build && playwright test",
+    "cli:prod": "tsx --env-file=.env.production server/cli.ts"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Mincheng Li",
+  "license": "MIT",
   "dependencies": {
     "@electric-sql/pglite": "^0.5.16",
     "@google/genai": "^3.3.0",
@@ -44,5 +45,8 @@
     "vitest": "^5.1.0"
   },
   "type": "module",
-  "private": true
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  }
 }

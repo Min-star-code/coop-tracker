@@ -1,0 +1,21 @@
+# Render Blueprint: one free web service that serves the API and the built React app.
+# The database is on Neon (Render's free PostgreSQL is deleted after 30 days).
+# Secrets (sync: false) are typed into the Render dashboard, never committed.
+services:
+  - type: web
+    name: coop-tracker
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

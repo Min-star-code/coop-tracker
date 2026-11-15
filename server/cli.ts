@@ -1,9 +1,10 @@
 /**
  * Admin commands, run on the machine that can reach the database:
  *   npm run cli -- user:create <email> <owner|viewer>   (asks for the password)
- *   npm run cli -- token:create <name>                  (prints the API token once)
+ *   npm run cli -- token:create <name> [--write-env]    (prints the API token once, or writes it to .env)
  * There is deliberately no sign-up page: only the owner creates accounts.
  */
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { createApiToken, createUser } from "./auth.js";
 import { openDb } from "./db.js";
@@ -25,7 +26,19 @@ try {
   } else if (cmd === "token:create") {
     const [name] = args;
     if (!name) throw new Error("usage: token:create <name>");
-    console.log(`API token for "${name}" (shown once, store it in .env as SYNC_TOKEN):\n${await createApiToken(db, name)}`);
+    const token = await createApiToken(db, name);
+    if (args.includes("--write-env")) {
+      // Put it straight into .env as SYNC_TOKEN, so it is never shown on screen or in logs.
+      const envPath = new URL("../.env", import.meta.url);
+      const current = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+      const next = /^SYNC_TOKEN=.*$/m.test(current)
+        ? current.replace(/^SYNC_TOKEN=.*$/m, `SYNC_TOKEN=${token}`)
+        : `${current.replace(/\n?$/, "\n")}SYNC_TOKEN=${token}\n`;
+      writeFileSync(envPath, next);
+      console.log(`API token for "${name}" written to .env as SYNC_TOKEN`);
+    } else {
+      console.log(`API token for "${name}" (shown once, store it in .env as SYNC_TOKEN):\n${token}`);
+    }
   } else {
     throw new Error("commands: user:create, token:create");
   }

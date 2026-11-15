@@ -28,7 +28,9 @@ export async function openDb(opts: { url?: string; dataDir?: string } = {}): Pro
     pg.types.setTypeParser(DATE_OID, (v) => v);
     const pool = new pg.Pool({
       connectionString: opts.url,
-      ssl: opts.url.includes("localhost") ? undefined : { rejectUnauthorized: false },
+      // Hosted databases (Neon) need TLS. Verify the certificate (Neon's is publicly trusted), so a
+      // man-in-the-middle can't pose as the database. Local/CI Postgres runs without TLS.
+      ssl: /localhost|127\.0\.0\.1/.test(opts.url) ? undefined : { rejectUnauthorized: true },
     });
     return {
       query: async (sql, params) => pool.query(sql, params as unknown[]) as any,
