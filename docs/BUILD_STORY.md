@@ -434,3 +434,61 @@ version that was measured. First regression run: 20/20, pass.
 - **混淆矩阵**：一张表，行是正确答案，列是模型的答案，一眼能看出“哪类最常被错认成哪类”。我就是从这里发现 9 个错误全是同一个原因（Work Placement 限制没写进规则）。
 - **开发集 / 测试集**：改 prompt 只看开发集的错；测试集只在最后跑一次。否则就像先看了考卷答案再考试，分数没有意义。
 - **一致性**：同一个岗位问两次，看答案是否一样。temperature=0 也不能保证 100% 一样，所以要实测（测试集 70/70 一致）。
+
+## Step 11 — RAG "Tailor resume": my own bullets, retrieved and cited (2026-11-15)
+
+**What it does.** On a new posting, the owner-only *Tailor resume* page shows which of my existing
+resume bullets and cover-letter paragraphs to use, the posting phrase each one answers, requirements
+none of my material covers, and the most similar past postings with what I did with them.
+
+**Pipeline.**
+1. **Chunking** (`scripts/rag-chunks.ts`): one chunk = one resume bullet (74), one cover-letter
+   paragraph (10; drafts I haven't approved are skipped), or one past posting (310). A bullet is the
+   unit I actually reuse.
+2. **Embeddings**: `gemini-embedding-001`, 768 numbers per chunk. Computed locally by
+   `npm run rag:index` (cached, waits out the free per-minute token limit) and uploaded with the
+   sync token. The server only embeds the pasted posting.
+3. **Vector search**: cosine similarity, top 8, at most 2 chunks per project. About 400 vectors is a
+   brute-force scan in TypeScript taking well under a millisecond, so no vector database (pgvector) needed.
+4. **Grounded generation**: Gemini Flash-Lite gets the posting and the 8 numbered excerpts and returns
+   JSON picks `{chunk_id, requirement, why}` plus `gaps`.
+5. **Hallucination guard** (`guard()` in `server/rag.ts`): a pick must cite a retrieved excerpt; every
+   number in "why" must appear in that excerpt or the posting; "requirement" must be a word-for-word
+   quote from the posting, otherwise it is flagged. The page shows the stored excerpt text, not
+   model text, so a suggestion cannot claim something my material doesn't say.
+
+**Privacy.** The outline and library hold personal notes, and the repo is public. The text lives only
+in the private database. Upload needs the agent token; search is owner-only, so viewers get 403 and
+signed-out users get 401. Tests use made-up sample chunks.
+
+**Eval** (`scripts/eval-rag.ts`, `eval/rag/`): 8 postings (QA, testing, web, data, UX, coordinator,
+AI, iOS). For each one I confirmed which of my projects/paragraphs *should* come back.
+
+| | round 1 (whole posting embedded) | round 2 (focused text, ≤2 per project) |
+|---|---|---|
+| Hit rate@8 (≥1 expected source retrieved) | 8/8 | 8/8 |
+| Recall@8 (share of expected sources retrieved) | 65.1% | **70.1%** |
+| Picks blocked by the guard | 0/35 | 0/35 |
+| "Requirement" not a real quote | 0/35 | 0/35 |
+
+- *Round 1 problem:* every similarity score sat between 0.60 and 0.62. WaterlooWorks boilerplate (work
+  term, address, application method) made all postings look alike. Fix: `focusPosting()` embeds only
+  the title, Job Summary, Job Responsibilities and Required Skills. One project with many similar
+  bullets could also fill the list, so retrieval now allows at most 2 chunks per project.
+- *Manual faithfulness check:* I listed every capitalised term in the 35 "why" lines that isn't in the
+  excerpt or posting. There were 5 hits, all false alarms (sentence-initial words, "President" from
+  "Class President").
+- *Honest limits:* 8 postings is small, and I improved retrieval while looking at these same 8, so
+  70.1% is not a held-out number. UX design is still weak (1/4): my design material is thin in English.
+  That's a content gap, not a retrieval bug. The guard checks numbers, ids and quotes; it can't prove
+  that every word of "why" is true, which is why the page shows the original excerpt next to it.
+
+### 用自己的话讲（面试用）
+
+- **RAG 是什么**：先“查资料”（retrieval），再让模型“只根据查到的资料回答”（generation）。模型本来就会编，RAG 的意义是把它的回答绑在我自己的真实材料上。
+- **切块（chunking）**：把材料切成小块再存。我按“一条简历 bullet / 一段 cover letter / 一个岗位”切，因为这是我真正会复用的单位。块太大，查到了也得再删；块太小，意思不完整。
+- **向量（embedding）**：把一段文字变成 768 个数字。意思相近的文字，数字也相近。“写自动化测试”和“Playwright end-to-end tests”字面不一样，但向量很接近，所以能查到，这一点关键词搜索做不到。
+- **top-k**：算岗位和每块材料的相似度（余弦相似度），取最像的 k 块（我用 k=8），每个项目最多 2 块，免得一个项目占满。
+- **防编造（hallucination guard）**：模型只能“选”，不能“写”。它必须引用查到的块的编号；理由里出现的数字必须在原文里；页面显示的是我原来写的那句话。这就是我做这个功能的卖点：建议里没有一句是简历里没有的。
+- **怎么评测**：检索用 hit rate 和 recall。我先标好每个岗位“应该查到哪些项目”，再看前 8 个里查到几个（recall 70.1%）。生成用忠实度：被拦下的建议数，以及我人工检查理由里有没有原文没有的东西。
+- **precision 和 recall 在这里的意思**：precision 是查出来的 8 块里有多少是真的相关；recall 是该查到的里面查到了多少。我更看重 recall，因为漏掉一个好例子比多看一个不相关的块代价大，后者模型和我都会跳过。

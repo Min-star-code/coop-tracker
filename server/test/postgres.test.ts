@@ -44,4 +44,13 @@ describe.skipIf(!url)("real PostgreSQL", () => {
     const { rows } = await db.query("SELECT applied_on, deadline FROM applications");
     expect(rows[0]).toEqual({ applied_on: "2026-11-13", deadline: "2026-11-20" });
   });
+
+  it("REAL[] embeddings round-trip as numbers (RAG index)", async () => {
+    await db.query(
+      "INSERT INTO rag_chunks (source, ref, text, hash, embedding) VALUES ('outline', 'r', 'some text here', 'h1', $1)",
+      [[0.25, -0.5, 1]],
+    );
+    const { rows } = await db.query<{ embedding: number[] }>("SELECT embedding FROM rag_chunks WHERE hash = 'h1'");
+    expect(rows[0].embedding.map(Number)).toEqual([0.25, -0.5, 1]);
+  });
 });

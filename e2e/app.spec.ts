@@ -40,6 +40,7 @@ test("owner: overview counts, filter, change status, timeline", async ({ page })
 test("viewer: read-only, no classifier", async ({ page }) => {
   await signIn(page, ACCOUNTS.viewer);
   await expect(page.getByRole("link", { name: "Classify a posting" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Tailor resume" })).toHaveCount(0);
 
   await page.getByRole("link", { name: "Applications" }).click();
   await page.getByText("SDET Intern").click();
@@ -71,4 +72,16 @@ test("owner: Today queue, most urgent first; Applied and Skip remove the card an
   await page.getByLabel("Skip reason").selectOption("Location");
   await expect(items).toHaveCount(0);
   await expect(page.getByTestId("week")).toContainText("1 skipped");
+});
+
+test("owner: tailor resume shows my own stored bullet with its source (fake RAG)", async ({ page }) => {
+  await signIn(page, ACCOUNTS.owner);
+  await page.getByRole("link", { name: "Tailor resume" }).click();
+  await page.getByLabel("Job posting").fill("Software QA co-op. You will write Playwright tests and keep the CI pipeline green.");
+  await page.getByRole("button", { name: "Suggest" }).click();
+  const pick = page.getByTestId("pick");
+  await expect(pick).toHaveCount(1);
+  await expect(pick).toContainText("Sample Project");
+  await expect(pick).toContainText("Wrote 12 Playwright end-to-end tests");
+  await expect(page.getByTestId("tailoring")).toContainText("WW 400001");
 });

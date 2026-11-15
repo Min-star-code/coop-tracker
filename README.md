@@ -27,6 +27,12 @@ pasted postings with an LLM.
   labelled real postings with a held-out test split: 68/70 on test, **0/23** citizen/PR postings missed,
   70/70 consistent across two runs ([reports](eval/gold/), [how](docs/BUILD_STORY.md)).
 
+- **Tailor resume (RAG, owner-only).** Paste a posting; it retrieves my most relevant resume bullets and
+  cover-letter paragraphs by embedding similarity, and Gemini picks which to use, citing each one.
+  The page shows my original text, never model-written claims; a guard drops picks that cite an
+  unretrieved excerpt or invent a number. Eval on 8 labelled postings: hit rate@8 8/8, recall@8 70.1%,
+  0/35 picks blocked ([results](eval/rag/)). My private notes stay in the database, not in this repo.
+
 There is no WaterlooWorks scraping. Data comes only from the agent's file.
 
 | Overview | Applications + timeline | LLM classifier |
@@ -64,8 +70,8 @@ Browser (owner / viewer) <──── React app + REST API (Express, same origi
 | GET | `/api/applications/:id` (with timeline) | owner, viewer |
 | PATCH | `/api/applications/:id` (status, note, dates) | owner |
 | GET | `/api/stats` | owner, viewer |
-| POST | `/api/classify` | owner |
-| POST | `/api/sync`; GET `/api/sync/pending` | sync agent (Bearer token) |
+| POST | `/api/classify`, `/api/rag/suggest`; GET `/api/rag/stats` | owner |
+| POST | `/api/sync`, `/api/rag/chunks`; GET `/api/sync/pending` | sync agent (Bearer token) |
 
 ## Run locally
 

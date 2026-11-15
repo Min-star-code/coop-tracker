@@ -12,6 +12,7 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "tsx server/index.ts",
+    "rag:index": "tsx scripts/rag-index.ts",
     "eval:regression": "node --env-file=.env --import tsx scripts/eval-gold.ts --prompt v3 --split regression --runs 1",
     "dev:seed": "tsx scripts/dev-seed.ts",
     "test:e2e": "vite build && playwright test",

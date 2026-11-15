@@ -140,3 +140,12 @@ button.secondary { background: var(--surface); color: var(--text); border-color:
 @media (max-width: 640px) {
   .qcard { grid-template-columns: 1fr; }
 }
+
+/* Tailor (RAG) page */
+.pick { margin-top: 0.75rem; }
+.pick blockquote { margin: 0.5rem 0; padding-left: 0.75rem; border-left: 3px solid var(--line); }
+.pick .why { margin: 0.25rem 0 0; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+@media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+.cols ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+details summary { cursor: pointer; }

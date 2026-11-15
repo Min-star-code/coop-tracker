@@ -5,11 +5,12 @@ import { Today } from "./pages/Today";
 import { Dashboard } from "./pages/Dashboard";
 import { Applications } from "./pages/Applications";
 import { Classify } from "./pages/Classify";
+import { Tailor } from "./pages/Tailor";
 
-type Page = "today" | "dashboard" | "applications" | "classify";
+type Page = "today" | "dashboard" | "applications" | "classify" | "tailor";
 const pageFromHash = (): Page => {
   const h = location.hash.slice(1);
-  return h === "dashboard" || h === "applications" || h === "classify" ? h : "today";
+  return h === "dashboard" || h === "applications" || h === "classify" || h === "tailor" ? h : "today";
 };
 
 export function App() {
@@ -32,7 +33,8 @@ export function App() {
     ["today", "Today"],
     ["dashboard", "Overview"],
     ["applications", "Applications"],
-    ...(isOwner ? ([["classify", "Classify a posting"]] as [Page, string][]) : []),
+    // Owner-only: these call the LLM, and Tailor reads my private resume notes.
+    ...(isOwner ? ([["classify", "Classify a posting"], ["tailor", "Tailor resume"]] as [Page, string][]) : []),
   ];
 
   return (
@@ -64,6 +66,7 @@ export function App() {
         {page === "dashboard" && <Dashboard />}
         {page === "applications" && <Applications canEdit={isOwner} />}
         {page === "classify" && isOwner && <Classify />}
+        {page === "tailor" && isOwner && <Tailor />}
       </main>
     </div>
   );

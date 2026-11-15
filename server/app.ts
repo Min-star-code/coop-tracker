@@ -8,12 +8,15 @@ import { authRouter, csrfGuard, loadPrincipal } from "./auth.js";
 import { applicationsRouter, statsRouter } from "./routes/applications.js";
 import { syncRouter } from "./sync.js";
 import { classifyRouter, type LlmClient } from "./classifier.js";
+import { ragRouter, type Embedder } from "./rag.js";
 
 export interface AppOptions {
   /** true in production (HTTPS): cookies are only sent over HTTPS. */
   secureCookies?: boolean;
   /** LLM for /api/classify. Tests pass a fake; production a GeminiClient; undefined = 503. */
   llm?: LlmClient;
+  /** Embeddings for the RAG tailoring helper. Tests pass a fake; undefined = 503. */
+  embedder?: Embedder;
   /** Built React app (dist/client). Served with an SPA fallback when it exists. */
   clientDir?: string;
 }
@@ -30,6 +33,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.use(cookieParser());
   // The sync sends the whole applications.json (~1,000 rows), so it gets a bigger body limit.
   app.use("/api/sync", express.json({ limit: "5mb" }));
+  app.use("/api/rag/chunks", express.json({ limit: "5mb" })); // ~300 past postings + bullets
   app.use(express.json({ limit: "100kb" }));
 
   app.get("/api/health", (_req, res) => {
@@ -41,6 +45,7 @@ export function createApp(db: Db, opts: AppOptions = {}) {
   app.use("/api/applications", applicationsRouter(db));
   app.use("/api/stats", statsRouter(db));
   app.use("/api/classify", classifyRouter(opts.llm));
+  app.use("/api/rag", ragRouter(db, opts.embedder, opts.llm));
   app.use("/api", () => {
     throw new HttpError(404, "no such endpoint");
   });

@@ -37,6 +37,16 @@ export interface TodayQueue {
 export interface StatusEvent { from_status: Status | null; to_status: Status; changed_at: string }
 export interface Stats { byStatus: Record<string, number>; bySource: Record<string, number> }
 export interface Classification { category: string; reason: string; model: string }
+export interface RagChunk { id: number; source: "outline" | "library"; ref: string; text: string; score: number }
+export interface Tailoring {
+  picks: (RagChunk & { requirement: string; why: string; quote_verified: boolean })[];
+  gaps: string[];
+  dropped: { chunk_id: number; reason: string }[];
+  retrieved: RagChunk[];
+  similar: { ref: string; score: number; title?: string; company?: string; status?: string }[];
+  model: string;
+  embedding_model: string;
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -77,4 +87,5 @@ export const api = {
   update: (id: number, changes: Partial<Pick<Application, "status" | "note" | "deadline" | "applied_on">>) =>
     request<Application>("PATCH", `/api/applications/${id}`, changes),
   classify: (text: string) => request<Classification>("POST", "/api/classify", { text }),
+  tailor: (text: string) => request<Tailoring>("POST", "/api/rag/suggest", { text }),
 };
